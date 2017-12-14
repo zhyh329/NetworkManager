@@ -1,0 +1,14 @@
+LIBNIPV4LL_1 {
+global:
+        n_ipv4ll_new;
+        n_ipv4ll_free;
+        n_ipv4ll_is_running;
+        n_ipv4ll_get_fd;
+        n_ipv4ll_dispatch;
+        n_ipv4ll_pop_event;
+        n_ipv4ll_start;
+        n_ipv4ll_stop;
+        n_ipv4ll_announce;
+local:
+       *;
+};
