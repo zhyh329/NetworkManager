@@ -1168,7 +1168,10 @@ libexec_PROGRAMS += \
 noinst_LTLIBRARIES += \
 	src/libNetworkManagerBase.la \
 	src/libNetworkManager.la \
-	src/libsystemd-nm.la
+	src/libsystemd-nm.la \
+	lib/libcsiphash.la \
+	lib/libnacd.la \
+	lib/libnipv4ll.la
 
 ###############################################################################
 
@@ -1339,6 +1342,33 @@ $(src_libsystemd_nm_la_OBJECTS): $(libnm_core_lib_h_pub_mkenums)
 
 ###############################################################################
 
+lib_libcsiphash_la_CPPFLAGS = $(src_cppflags)
+lib_libcsiphash_la_SOURCES = \
+	lib/c-siphash/src/c-siphash.c \
+	lib/c-siphash/src/c-siphash.h
+
+###############################################################################
+
+lib_libnacd_la_CPPFLAGS = \
+	$(src_cppflags) \
+	-I lib/c-list/src \
+	-I lib/c-siphash/src
+lib_libnacd_la_SOURCES = \
+	lib/n-acd/src/n-acd.c \
+	lib/n-acd/src/n-acd.h
+
+###############################################################################
+
+lib_libnipv4ll_la_CPPFLAGS = \
+	$(src_cppflags) \
+	-I lib/c-list/src \
+	-I lib/n-acd/src
+lib_libnipv4ll_la_SOURCES = \
+	lib/n-ipv4ll/src/n-ipv4ll.c \
+	lib/n-ipv4ll/src/n-ipv4ll.h
+
+###############################################################################
+
 src_libNetworkManagerBase_la_CPPFLAGS = $(src_cppflags)
 
 src_libNetworkManagerBase_la_SOURCES = \
@@ -1413,7 +1443,9 @@ $(src_libNetworkManagerBase_la_OBJECTS): $(libnm_core_lib_h_pub_mkenums)
 
 ###############################################################################
 
-src_libNetworkManager_la_CPPFLAGS = $(src_cppflags)
+src_libNetworkManager_la_CPPFLAGS = \
+	$(src_cppflags) \
+	-I$(srcdir)/lib
 
 src_libNetworkManager_la_SOURCES = \
 	\
@@ -1591,6 +1623,9 @@ endif
 src_libNetworkManager_la_LIBADD = \
 	src/libNetworkManagerBase.la \
 	src/libsystemd-nm.la \
+	lib/libcsiphash.la \
+	lib/libnacd.la \
+	lib/libnipv4ll.la \
 	$(GLIB_LIBS) \
 	$(LIBUDEV_LIBS) \
 	$(LIBNL_LIBS) \
