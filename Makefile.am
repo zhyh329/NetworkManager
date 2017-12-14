@@ -1316,7 +1316,6 @@ src_libsystemd_nm_la_SOURCES = \
 	src/systemd/src/libsystemd-network/sd-dhcp6-client.c \
 	src/systemd/src/libsystemd-network/sd-dhcp6-lease.c \
 	src/systemd/src/libsystemd-network/sd-ipv4acd.c \
-	src/systemd/src/libsystemd-network/sd-ipv4ll.c \
 	src/systemd/src/libsystemd-network/sd-lldp.c \
 	src/systemd/src/libsystemd/sd-event/sd-event.c \
 	src/systemd/src/libsystemd/sd-id128/id128-util.c \
@@ -1332,7 +1331,6 @@ src_libsystemd_nm_la_SOURCES = \
 	src/systemd/src/systemd/sd-event.h \
 	src/systemd/src/systemd/sd-id128.h \
 	src/systemd/src/systemd/sd-ipv4acd.h \
-	src/systemd/src/systemd/sd-ipv4ll.h \
 	src/systemd/src/systemd/sd-lldp.h \
 	src/systemd/src/systemd/sd-ndisc.h
 

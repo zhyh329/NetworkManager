@@ -74,6 +74,7 @@
 #include "nm-connectivity.h"
 #include "nm-dbus-interface.h"
 #include "nm-device-vlan.h"
+#include "n-ipv4ll/src/n-ipv4ll.h"
 
 #include "nm-device-logging.h"
 _LOG_DECLARE_SELF (NMDevice);
@@ -419,9 +420,13 @@ typedef struct _NMDevicePrivate {
 	NMFirewallManagerCallId fw_call;
 
 	/* IPv4LL stuff */
-	sd_ipv4ll *    ipv4ll;
-	guint          ipv4ll_timeout;
-	guint          rt6_temporary_not_available_id;
+	struct {
+		NIpv4ll *    handle;
+		GIOChannel * channel;
+		guint        event_id;
+	} ipv4ll;
+
+	guint rt6_temporary_not_available_id;
 
 	/* IPv4 DAD stuff */
 	struct {
@@ -5730,13 +5735,9 @@ ipv4ll_cleanup (NMDevice *self)
 {
 	NMDevicePrivate *priv = NM_DEVICE_GET_PRIVATE (self);
 
-	if (priv->ipv4ll) {
-		sd_ipv4ll_set_callback (priv->ipv4ll, NULL, NULL);
-		sd_ipv4ll_stop (priv->ipv4ll);
-		priv->ipv4ll = sd_ipv4ll_unref (priv->ipv4ll);
-	}
-
-	nm_clear_g_source (&priv->ipv4ll_timeout);
+	nm_clear_g_source (&priv->ipv4ll.event_id);
+	g_clear_pointer (&priv->ipv4ll.channel, g_io_channel_unref);
+	g_clear_pointer (&priv->ipv4ll.handle, n_ipv4ll_free);
 }
 
 static NMIP4Config *
@@ -5769,58 +5770,49 @@ ipv4ll_get_ip4_config (NMDevice *self, guint32 lla)
 #define IPV4LL_NETWORK (htonl (0xA9FE0000L))
 #define IPV4LL_NETMASK (htonl (0xFFFF0000L))
 
-static void
-nm_device_handle_ipv4ll_event (sd_ipv4ll *ll, int event, void *data)
+static gboolean
+ipv4ll_event (GIOChannel *source, GIOCondition condition, gpointer data)
 {
 	NMDevice *self = data;
 	NMDevicePrivate *priv = NM_DEVICE_GET_PRIVATE (self);
-	NMConnection *connection = NULL;
-	const char *method;
-	struct in_addr address;
 	NMIP4Config *config;
+	NIpv4llEvent *event;
 	int r;
 
-	if (priv->act_request == NULL)
-		return;
+	r = n_ipv4ll_dispatch (priv->ipv4ll.handle);
+	if (r)
+		return G_SOURCE_CONTINUE;
 
-	connection = nm_act_request_get_applied_connection (priv->act_request);
-	g_assert (connection);
+	r = n_ipv4ll_pop_event (priv->ipv4ll.handle, &event);
+	if (r)
+		return G_SOURCE_CONTINUE;
 
-	/* Ignore if the connection isn't an AutoIP connection */
-	method = nm_utils_get_ip_config_method (connection, NM_TYPE_SETTING_IP4_CONFIG);
-	if (g_strcmp0 (method, NM_SETTING_IP4_CONFIG_METHOD_LINK_LOCAL) != 0)
-		return;
-
-	switch (event) {
-	case SD_IPV4LL_EVENT_BIND:
-		r = sd_ipv4ll_get_address (ll, &address);
-		if (r < 0) {
-			_LOGE (LOGD_AUTOIP4, "invalid IPv4 link-local address received, error %d.", r);
-			nm_device_ip_method_failed (self, AF_INET, NM_DEVICE_STATE_REASON_AUTOIP_START_FAILED);
-			return;
-		}
-
-		if ((address.s_addr & IPV4LL_NETMASK) != IPV4LL_NETWORK) {
-			_LOGE (LOGD_AUTOIP4, "invalid address %08x received (not link-local).", address.s_addr);
+	switch (event->event) {
+	case N_IPV4LL_EVENT_READY:
+		if ((event->ready.address.s_addr & IPV4LL_NETMASK) != IPV4LL_NETWORK) {
+			_LOGE (LOGD_AUTOIP4, "invalid address %08x received (not link-local)",
+			       event->ready.address.s_addr);
 			nm_device_ip_method_failed (self, AF_INET, NM_DEVICE_STATE_REASON_AUTOIP_ERROR);
-			return;
+			return G_SOURCE_CONTINUE;
 		}
 
-		config = ipv4ll_get_ip4_config (self, address.s_addr);
-		if (config == NULL) {
+		config = ipv4ll_get_ip4_config (self, event->ready.address.s_addr);
+		if (!config) {
 			_LOGE (LOGD_AUTOIP4, "failed to get IPv4LL config");
 			nm_device_ip_method_failed (self, AF_INET, NM_DEVICE_STATE_REASON_AUTOIP_FAILED);
-			return;
+			return G_SOURCE_CONTINUE;
 		}
 
-		if (priv->ip4_state == IP_CONF) {
-			nm_clear_g_source (&priv->ipv4ll_timeout);
+		if (priv->ip4_state == IP_CONF)
 			nm_device_activate_schedule_ip4_config_result (self, config);
-		} else if (priv->ip4_state == IP_DONE) {
+		else if (priv->ip4_state == IP_DONE) {
 			applied_config_init (&priv->dev_ip4_config, config);
 			if (!ip4_config_merge_and_apply (self, TRUE)) {
-				_LOGE (LOGD_AUTOIP4, "failed to update IP4 config for autoip change.");
+				_LOGE (LOGD_AUTOIP4, "failed to update IP4 config for autoip change");
 				nm_device_ip_method_failed (self, AF_INET, NM_DEVICE_STATE_REASON_AUTOIP_FAILED);
+			} else {
+				if (n_ipv4ll_announce (priv->ipv4ll.handle))
+					_LOGW (LOGD_AUTOIP4, "failed to announce IPv4LL address");
 			}
 		} else
 			g_assert_not_reached ();
@@ -5828,27 +5820,11 @@ nm_device_handle_ipv4ll_event (sd_ipv4ll *ll, int event, void *data)
 		g_object_unref (config);
 		break;
 	default:
-		_LOGW (LOGD_AUTOIP4, "IPv4LL address no longer valid after event %d.", event);
+		_LOGW (LOGD_AUTOIP4, "IPv4LL address no longer valid after event %d.", event->event);
 		nm_device_ip_method_failed (self, AF_INET, NM_DEVICE_STATE_REASON_AUTOIP_FAILED);
 	}
-}
 
-static gboolean
-ipv4ll_timeout_cb (gpointer user_data)
-{
-	NMDevice *self = NM_DEVICE (user_data);
-	NMDevicePrivate *priv = NM_DEVICE_GET_PRIVATE (self);
-
-	if (priv->ipv4ll_timeout) {
-		_LOGI (LOGD_AUTOIP4, "IPv4LL configuration timed out.");
-		priv->ipv4ll_timeout = 0;
-		ipv4ll_cleanup (self);
-
-		if (priv->ip4_state == IP_CONF)
-			nm_device_activate_schedule_ip4_config_timeout (self);
-	}
-
-	return FALSE;
+	return G_SOURCE_CONTINUE;
 }
 
 static NMActStageReturn
@@ -5856,22 +5832,11 @@ ipv4ll_start (NMDevice *self)
 {
 	NMDevicePrivate *priv = NM_DEVICE_GET_PRIVATE (self);
 	const struct ether_addr *addr;
-	int ifindex, r;
+	int ifindex, r, fd;
 	size_t addr_len;
+	NIpv4llConfig *config;
 
 	ipv4ll_cleanup (self);
-
-	r = sd_ipv4ll_new (&priv->ipv4ll);
-	if (r < 0) {
-		_LOGE (LOGD_AUTOIP4, "IPv4LL: new() failed with error %d", r);
-		return NM_ACT_STAGE_RETURN_FAILURE;
-	}
-
-	r = sd_ipv4ll_attach_event (priv->ipv4ll, NULL, 0);
-	if (r < 0) {
-		_LOGE (LOGD_AUTOIP4, "IPv4LL: attach_event() failed with error %d", r);
-		return NM_ACT_STAGE_RETURN_FAILURE;
-	}
 
 	ifindex = nm_device_get_ip_ifindex (self);
 	addr = nm_platform_link_get_address (nm_device_get_platform (self), ifindex, &addr_len);
@@ -5880,25 +5845,26 @@ ipv4ll_start (NMDevice *self)
 		return NM_ACT_STAGE_RETURN_FAILURE;
 	}
 
-	r = sd_ipv4ll_set_mac (priv->ipv4ll, addr);
+	r = n_ipv4ll_new (&priv->ipv4ll.handle);
 	if (r < 0) {
-		_LOGE (LOGD_AUTOIP4, "IPv4LL: set_mac() failed with error %d", r);
+		_LOGE (LOGD_AUTOIP4, "IPv4LL: new() failed with error %d", r);
 		return NM_ACT_STAGE_RETURN_FAILURE;
 	}
 
-	r = sd_ipv4ll_set_ifindex (priv->ipv4ll, ifindex);
-	if (r < 0) {
-		_LOGE (LOGD_AUTOIP4, "IPv4LL: set_ifindex() failed with error %d", r);
-		return NM_ACT_STAGE_RETURN_FAILURE;
-	}
+	n_ipv4ll_get_fd (priv->ipv4ll.handle, &fd);
+	priv->ipv4ll.channel = g_io_channel_unix_new (fd);
+	priv->ipv4ll.event_id = g_io_add_watch (priv->ipv4ll.channel, G_IO_IN,
+	                                        (GIOFunc) ipv4ll_event, self);
 
-	r = sd_ipv4ll_set_callback (priv->ipv4ll, nm_device_handle_ipv4ll_event, self);
-	if (r < 0) {
-		_LOGE (LOGD_AUTOIP4, "IPv4LL: set_callback() failed with error %d", r);
-		return NM_ACT_STAGE_RETURN_FAILURE;
-	}
+	config = &(NIpv4llConfig) {
+		.ifindex = nm_device_get_ip_ifindex (self),
+		.transport = N_IPV4LL_TRANSPORT_ETHERNET,
+		.mac = (uint8_t *) addr,
+		.n_mac = addr_len,
+		.timeout_msec = 2000,
+	};
 
-	r = sd_ipv4ll_start (priv->ipv4ll);
+	r = n_ipv4ll_start (priv->ipv4ll.handle, config);
 	if (r < 0) {
 		_LOGE (LOGD_AUTOIP4, "IPv4LL: start() failed with error %d", r);
 		return NM_ACT_STAGE_RETURN_FAILURE;
@@ -5906,8 +5872,6 @@ ipv4ll_start (NMDevice *self)
 
 	_LOGI (LOGD_DEVICE | LOGD_AUTOIP4, "IPv4LL: started");
 
-	/* Start a timeout to bound the address attempt */
-	priv->ipv4ll_timeout = g_timeout_add_seconds (20, ipv4ll_timeout_cb, self);
 	return NM_ACT_STAGE_RETURN_POSTPONE;
 }
 
