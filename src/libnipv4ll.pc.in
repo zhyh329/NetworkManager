@@ -1,0 +1,5 @@
+Name: libnaipv4ll
+Description: Dynamic IPv4 Link-Local Address Configuration Library
+Version: @VERSION@
+Libs: -L@libdir@ -lnipv4ll
+Cflags: -I@includedir@
