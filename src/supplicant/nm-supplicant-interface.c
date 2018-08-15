@@ -94,6 +94,7 @@ NM_GOBJECT_PROPERTIES_DEFINE (NMSupplicantInterface,
 	PROP_AP_SUPPORT,
 	PROP_PMF_SUPPORT,
 	PROP_FILS_SUPPORT,
+	PROP_FT_SUPPORT,
 );
 
 typedef struct {
@@ -104,6 +105,7 @@ typedef struct {
 	NMSupplicantFeature ap_support;   /* Lightweight AP mode support */
 	NMSupplicantFeature pmf_support;
 	NMSupplicantFeature fils_support;
+	NMSupplicantFeature ft_support;
 	guint32        max_scan_ssids;
 	guint32        ready_count;
 
@@ -573,6 +575,12 @@ nm_supplicant_interface_get_fils_support (NMSupplicantInterface *self)
 	return NM_SUPPLICANT_INTERFACE_GET_PRIVATE (self)->fils_support;
 }
 
+NMSupplicantFeature
+nm_supplicant_interface_get_ft_support (NMSupplicantInterface *self)
+{
+	return NM_SUPPLICANT_INTERFACE_GET_PRIVATE (self)->ft_support;
+}
+
 void
 nm_supplicant_interface_set_ap_support (NMSupplicantInterface *self,
                                         NMSupplicantFeature ap_support)
@@ -611,6 +619,15 @@ nm_supplicant_interface_set_fils_support (NMSupplicantInterface *self,
 	NMSupplicantInterfacePrivate *priv = NM_SUPPLICANT_INTERFACE_GET_PRIVATE (self);
 
 	priv->fils_support = fils_support;
+}
+
+void
+nm_supplicant_interface_set_ft_support (NMSupplicantInterface *self,
+                                        NMSupplicantFeature ft_support)
+{
+	NMSupplicantInterfacePrivate *priv = NM_SUPPLICANT_INTERFACE_GET_PRIVATE (self);
+
+	priv->ft_support = ft_support;
 }
 
 /*****************************************************************************/
@@ -1918,6 +1935,10 @@ set_property (GObject *object,
 		/* construct-only */
 		priv->fils_support = g_value_get_int (value);
 		break;
+	case PROP_FT_SUPPORT:
+		/* construct-only */
+		priv->ft_support = g_value_get_int (value);
+		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
 		break;
@@ -1939,7 +1960,8 @@ nm_supplicant_interface_new (const char *ifname,
                              NMSupplicantFeature fast_support,
                              NMSupplicantFeature ap_support,
                              NMSupplicantFeature pmf_support,
-                             NMSupplicantFeature fils_support)
+                             NMSupplicantFeature fils_support,
+                             NMSupplicantFeature ft_support)
 {
 	g_return_val_if_fail (ifname != NULL, NULL);
 
@@ -1950,6 +1972,7 @@ nm_supplicant_interface_new (const char *ifname,
 	                     NM_SUPPLICANT_INTERFACE_AP_SUPPORT, (int) ap_support,
 	                     NM_SUPPLICANT_INTERFACE_PMF_SUPPORT, (int) pmf_support,
 	                     NM_SUPPLICANT_INTERFACE_FILS_SUPPORT, (int) fils_support,
+	                     NM_SUPPLICANT_INTERFACE_FT_SUPPORT, (int) ft_support,
 	                     NULL);
 }
 
@@ -2051,6 +2074,14 @@ nm_supplicant_interface_class_init (NMSupplicantInterfaceClass *klass)
 	                      G_PARAM_STATIC_STRINGS);
 	obj_properties[PROP_FILS_SUPPORT] =
 	    g_param_spec_int (NM_SUPPLICANT_INTERFACE_FILS_SUPPORT, "", "",
+	                      NM_SUPPLICANT_FEATURE_UNKNOWN,
+	                      NM_SUPPLICANT_FEATURE_YES,
+	                      NM_SUPPLICANT_FEATURE_UNKNOWN,
+	                      G_PARAM_WRITABLE |
+	                      G_PARAM_CONSTRUCT_ONLY |
+	                      G_PARAM_STATIC_STRINGS);
+	obj_properties[PROP_FT_SUPPORT] =
+	    g_param_spec_int (NM_SUPPLICANT_INTERFACE_FT_SUPPORT, "", "",
 	                      NM_SUPPLICANT_FEATURE_UNKNOWN,
 	                      NM_SUPPLICANT_FEATURE_YES,
 	                      NM_SUPPLICANT_FEATURE_UNKNOWN,

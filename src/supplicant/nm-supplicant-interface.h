@@ -62,6 +62,7 @@ typedef enum {
 #define NM_SUPPLICANT_INTERFACE_AP_SUPPORT       "ap-support"
 #define NM_SUPPLICANT_INTERFACE_PMF_SUPPORT      "pmf-support"
 #define NM_SUPPLICANT_INTERFACE_FILS_SUPPORT     "fils-support"
+#define NM_SUPPLICANT_INTERFACE_FT_SUPPORT       "ft-support"
 
 /* Signals */
 #define NM_SUPPLICANT_INTERFACE_STATE            "state"
@@ -81,7 +82,8 @@ NMSupplicantInterface * nm_supplicant_interface_new (const char *ifname,
                                                      NMSupplicantFeature fast_support,
                                                      NMSupplicantFeature ap_support,
                                                      NMSupplicantFeature pmf_support,
-                                                     NMSupplicantFeature fils_support);
+                                                     NMSupplicantFeature fils_support,
+                                                     NMSupplicantFeature ft_support);
 
 void nm_supplicant_interface_set_supplicant_available (NMSupplicantInterface *self,
                                                        gboolean available);
@@ -126,6 +128,7 @@ gboolean nm_supplicant_interface_credentials_reply (NMSupplicantInterface *self,
 NMSupplicantFeature nm_supplicant_interface_get_ap_support (NMSupplicantInterface *self);
 NMSupplicantFeature nm_supplicant_interface_get_pmf_support (NMSupplicantInterface *self);
 NMSupplicantFeature nm_supplicant_interface_get_fils_support (NMSupplicantInterface *self);
+NMSupplicantFeature nm_supplicant_interface_get_ft_support (NMSupplicantInterface *self);
 
 void nm_supplicant_interface_set_ap_support (NMSupplicantInterface *self,
                                              NMSupplicantFeature apmode);
@@ -138,6 +141,9 @@ void nm_supplicant_interface_set_pmf_support (NMSupplicantInterface *self,
 
 void nm_supplicant_interface_set_fils_support (NMSupplicantInterface *self,
                                                NMSupplicantFeature fils_support);
+
+void nm_supplicant_interface_set_ft_support (NMSupplicantInterface *self,
+                                             NMSupplicantFeature ft_support);
 
 void nm_supplicant_interface_enroll_wps (NMSupplicantInterface *self,
                                          const char *const type,
