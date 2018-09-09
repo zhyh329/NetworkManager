@@ -28,8 +28,8 @@
 typedef struct {
 	char *_str;
 	union {
-		gsize len;
-		const gsize _len;
+		const gsize len;
+		gsize _len;
 	};
 	gsize _allocated;
 	bool _do_bzero_mem;
