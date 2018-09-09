@@ -104,6 +104,7 @@ shared_files_clients_common = files('''
 '''.split())
 
 shared_files_libnm_util = files('''
+    nm-utils/nm-secret-utils.c
     nm-utils/nm-shared-utils.c
 '''.split())
 
