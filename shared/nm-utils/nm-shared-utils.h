@@ -959,4 +959,8 @@ void nm_utils_invoke_on_idle (NMUtilsInvokeOnIdleCallback callback,
                               gpointer callback_user_data,
                               GCancellable *cancellable);
 
+/*****************************************************************************/
+
+gsize nm_utils_get_next_realloc_size (gboolean true_realloc, gsize requested);
+
 #endif /* __NM_SHARED_UTILS_H__ */

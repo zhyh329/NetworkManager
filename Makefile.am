@@ -315,6 +315,7 @@ shared_nm_utils_libnm_utils_base_la_SOURCES = \
 	shared/nm-utils/nm-secret-utils.h \
 	shared/nm-utils/nm-shared-utils.c \
 	shared/nm-utils/nm-shared-utils.h \
+	shared/nm-utils/nm-str-buf.h \
 	shared/nm-utils/nm-time-utils.c \
 	shared/nm-utils/nm-time-utils.h \
 	shared/nm-utils/unaligned.h \

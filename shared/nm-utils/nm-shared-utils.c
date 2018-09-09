@@ -38,6 +38,52 @@ const NMIPAddr nm_ip_addr_zero = { 0 };
 
 /*****************************************************************************/
 
+gsize
+nm_utils_get_next_realloc_size (gboolean true_realloc, gsize requested)
+{
+	gsize n;
+
+	/* https://doc.qt.io/qt-5/containers.html#growth-strategies */
+
+	if (requested <= 40) {
+		/* small allocations. Increase in small steps of 8 bytes.
+		 *
+		 * We get thus sizes of 8, 16, 32, 40. */
+		if (requested <= 8)
+			return 8;
+		if (requested <= 16)
+			return 16;
+		if (requested <= 32)
+			return 32;
+		return 40;
+	}
+
+	if (   requested <= 0x2000 - 24
+	    || (   !true_realloc
+	        && requested <= ((G_MAXSIZE / 2) + 1) - 24)) {
+		/* mid sized allocations. Double the size, minus 24 bytes head-room.
+		 *
+		 * With !true_realloc, we also do this scheme, because we don't actually
+		 * realloc(). Hence, we always want to grow the buffer exponentially.
+		 *
+		 * We get thus sizes of 104, 232, 488, 1000, 2024, 4072, 8168... */
+		n = 128;
+		while (n - 24 < requested)
+			n <<= 1;
+		return n - 24;
+	}
+
+	if (requested > G_MAXSIZE - 0x0FFF)
+		return G_MAXSIZE;
+
+	/* For large allocations (with !do_bzero_mem) we allocate memory in chunks of
+	 * 4K (- 24 bytes head room), assuming that the memory gets mmapped and thus
+	 * realloc() is efficient by just reordering pages. */
+	return ((requested + 0x0FFF) & ~((gsize) 0x0FFF)) - 24;
+}
+
+/*****************************************************************************/
+
 void
 nm_utils_strbuf_append_c (char **buf, gsize *len, char c)
 {
