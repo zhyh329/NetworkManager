@@ -148,4 +148,67 @@ GBytes *nm_secret_buf_to_gbytes_take (NMSecretBuf *secret, gssize actual_len);
 
 /*****************************************************************************/
 
+static inline char *
+nm_secret_mem_realloc (char *m_old, gboolean do_bzero_mem, gsize cur_len, gsize new_len)
+{
+	char *m_new;
+
+	/* re-allocating to zero bytes is an odd case. We don't need it
+	 * and don't want to care about handling the edge cases. */
+	nm_assert (new_len > 0);
+
+	/* regardless of success/failure, @m_old will always be freed/consumed. */
+
+	if (   do_bzero_mem
+	    && cur_len > 0) {
+		m_new = g_malloc (new_len);
+		memcpy (m_new, m_old, NM_MIN (cur_len, new_len));
+		nm_explicit_bzero (m_old, cur_len);
+		g_free (m_old);
+	} else
+		m_new = g_realloc (m_old, new_len);
+
+	return m_new;
+}
+
+static inline char *
+nm_secret_mem_try_realloc (char *m_old, gboolean do_bzero_mem, gsize cur_len, gsize new_len)
+{
+	char *m_new;
+
+	/* re-allocating to zero bytes is an odd case. We don't need it
+	 * and don't want to care about handling the edge cases. */
+	nm_assert (new_len > 0);
+
+	if (   do_bzero_mem
+	    && cur_len > 0) {
+		m_new = g_try_malloc (new_len);
+		if (!m_new)
+			return NULL;
+		memcpy (m_new, m_old, NM_MIN (cur_len, new_len));
+		nm_explicit_bzero (m_old, cur_len);
+		g_free (m_old);
+		return m_new;
+	}
+
+	return g_try_realloc (m_old, new_len);
+}
+
+static inline char *
+nm_secret_mem_try_realloc_take (char *m_old, gboolean do_bzero_mem, gsize cur_len, gsize new_len)
+{
+	char *m_new;
+
+	m_new = nm_secret_mem_try_realloc (m_old, do_bzero_mem, cur_len, new_len);
+	if (G_UNLIKELY (!m_new)) {
+		/* realloc failed and m_old is unchanged. Here, we still free/consume
+		 * the old pointer, which makes it different from plain realloc. */
+		nm_explicit_bzero (m_old, cur_len);
+		g_free (m_old);
+	}
+	return m_new;
+}
+
+/*****************************************************************************/
+
 #endif /* __NM_SECRET_UTILS_H__ */
