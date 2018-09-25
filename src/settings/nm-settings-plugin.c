@@ -23,12 +23,14 @@
 
 #include "nm-settings-plugin.h"
 
+#include "nm-utils.h"
+
 #include "nm-settings-connection.h"
 
 /*****************************************************************************/
 
 enum {
-	CONNECTION_ADDED,
+	CONNECTION_CHANGED,
 	UNMANAGED_SPECS_CHANGED,
 	UNRECOGNIZED_SPECS_CHANGED,
 
@@ -44,59 +46,69 @@ G_DEFINE_TYPE (NMSettingsPlugin, nm_settings_plugin, G_TYPE_OBJECT)
 void
 nm_settings_plugin_initialize (NMSettingsPlugin *self)
 {
+	NMSettingsPluginClass *klass;
+
 	g_return_if_fail (NM_IS_SETTINGS_PLUGIN (self));
 
-	if (NM_SETTINGS_PLUGIN_GET_CLASS (self)->initialize)
-		NM_SETTINGS_PLUGIN_GET_CLASS (self)->initialize (self);
-}
-
-GSList *
-nm_settings_plugin_get_connections (NMSettingsPlugin *self)
-{
-	g_return_val_if_fail (NM_IS_SETTINGS_PLUGIN (self), NULL);
-
-	if (NM_SETTINGS_PLUGIN_GET_CLASS (self)->get_connections)
-		return NM_SETTINGS_PLUGIN_GET_CLASS (self)->get_connections (self);
-	return NULL;
+	klass = NM_SETTINGS_PLUGIN_GET_CLASS (self);
+	if (klass->initialize)
+		klass->initialize (self);
 }
 
 gboolean
 nm_settings_plugin_load_connection (NMSettingsPlugin *self,
-                                    const char *filename)
+                                    const char *filename,
+                                    GError **error)
 {
+	NMSettingsPluginClass *klass;
+
 	g_return_val_if_fail (NM_IS_SETTINGS_PLUGIN (self), FALSE);
 
-	if (NM_SETTINGS_PLUGIN_GET_CLASS (self)->load_connection)
-		return NM_SETTINGS_PLUGIN_GET_CLASS (self)->load_connection (self, filename);
-	return FALSE;
+	klass = NM_SETTINGS_PLUGIN_GET_CLASS (self);
+	if (!klass->load_connection) {
+		g_set_error_literal (error, NM_SETTINGS_ERROR, NM_SETTINGS_ERROR_NOT_SUPPORTED,
+		                     "Plugin does not support loading connection");
+		return FALSE;
+	}
+	//XXX
+	return klass->load_connection (self, filename, NULL, NULL, error);
 }
 
 void
 nm_settings_plugin_reload_connections (NMSettingsPlugin *self)
 {
+	NMSettingsPluginClass *klass;
+
 	g_return_if_fail (NM_IS_SETTINGS_PLUGIN (self));
 
-	if (NM_SETTINGS_PLUGIN_GET_CLASS (self)->reload_connections)
-		NM_SETTINGS_PLUGIN_GET_CLASS (self)->reload_connections (self);
+	klass = NM_SETTINGS_PLUGIN_GET_CLASS (self);
+	if (klass->reload_connections)
+		klass->reload_connections (self);
 }
 
 GSList *
 nm_settings_plugin_get_unmanaged_specs (NMSettingsPlugin *self)
 {
+	NMSettingsPluginClass *klass;
+
 	g_return_val_if_fail (NM_IS_SETTINGS_PLUGIN (self), NULL);
 
-	if (NM_SETTINGS_PLUGIN_GET_CLASS (self)->get_unmanaged_specs)
-		return NM_SETTINGS_PLUGIN_GET_CLASS (self)->get_unmanaged_specs (self);
+	klass = NM_SETTINGS_PLUGIN_GET_CLASS (self);
+	if (klass->get_unmanaged_specs)
+		return klass->get_unmanaged_specs (self);
 	return NULL;
 }
 
 GSList *
 nm_settings_plugin_get_unrecognized_specs (NMSettingsPlugin *self)
 {
+	NMSettingsPluginClass *klass;
+
 	g_return_val_if_fail (NM_IS_SETTINGS_PLUGIN (self), NULL);
 
-	if (NM_SETTINGS_PLUGIN_GET_CLASS (self)->get_unrecognized_specs)
-		return NM_SETTINGS_PLUGIN_GET_CLASS (self)->get_unrecognized_specs (self);
+	klass = NM_SETTINGS_PLUGIN_GET_CLASS (self);
+	if (klass->get_unrecognized_specs)
+		return klass->get_unrecognized_specs (self);
 	return NULL;
 }
 
@@ -134,19 +146,25 @@ nm_settings_plugin_add_connection (NMSettingsPlugin *self,
 		return NULL;
 	}
 
-	return klass->add_connection (self, connection, save_to_disk, error);
+	//XXX
+	klass->add_connection (self, connection, save_to_disk, NULL, NULL, error);
+	return NULL;
 }
 
 /*****************************************************************************/
 
 void
-_nm_settings_plugin_emit_signal_connection_added (NMSettingsPlugin *self,
-                                                  NMSettingsConnection *sett_conn)
+_nm_settings_plugin_emit_signal_connection_changed (NMSettingsPlugin *self,
+                                                    const char *uuid,
+                                                    NMSettingsStorage *storage,
+                                                    NMConnection *connection)
 {
 	nm_assert (NM_IS_SETTINGS_PLUGIN (self));
-	nm_assert (NM_IS_SETTINGS_CONNECTION (sett_conn));
+	nm_assert (uuid && nm_utils_is_uuid (uuid));
+	nm_assert (NM_IS_SETTINGS_STORAGE (storage));
+	nm_assert (!connection || NM_IS_CONNECTION (connection));
 
-	g_signal_emit (self, signals[CONNECTION_ADDED], 0, sett_conn);
+	g_signal_emit (self, signals[CONNECTION_CHANGED], 0, uuid, storage, connection);
 }
 
 void
@@ -177,14 +195,17 @@ nm_settings_plugin_class_init (NMSettingsPluginClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
-	signals[CONNECTION_ADDED] =
-	    g_signal_new (NM_SETTINGS_PLUGIN_CONNECTION_ADDED,
+	signals[CONNECTION_CHANGED] =
+	    g_signal_new (NM_SETTINGS_PLUGIN_CONNECTION_CHANGED,
 	                  G_OBJECT_CLASS_TYPE (object_class),
 	                  G_SIGNAL_RUN_FIRST,
 	                  0, NULL, NULL,
-	                  g_cclosure_marshal_VOID__OBJECT,
-	                  G_TYPE_NONE, 1,
-	                  NM_TYPE_SETTINGS_CONNECTION);
+	                  NULL,
+	                  G_TYPE_NONE,
+	                  3,
+	                  G_TYPE_STRING,
+	                  NM_TYPE_SETTINGS_STORAGE,
+	                  NM_TYPE_CONNECTION);
 
 	signals[UNMANAGED_SPECS_CHANGED] =
 	    g_signal_new (NM_SETTINGS_PLUGIN_UNMANAGED_SPECS_CHANGED,

@@ -25,8 +25,10 @@
 #include "nm-connection.h"
 
 gboolean nms_keyfile_writer_connection (NMConnection *connection,
-                                        gboolean save_to_disk,
+                                        const char *keyfile_dir,
+                                        const char *profile_dir,
                                         const char *existing_path,
+                                        gboolean existing_path_read_only,
                                         gboolean force_rename,
                                         char **out_path,
                                         NMConnection **out_reread,

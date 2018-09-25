@@ -162,6 +162,7 @@ nms_keyfile_reader_from_keyfile (GKeyFile *key_file,
 NMConnection *
 nms_keyfile_reader_from_file (const char *full_filename,
                               const char *profile_dir,
+                              struct stat *out_stat,
                               GError **error)
 {
 	gs_unref_keyfile GKeyFile *key_file = NULL;
@@ -173,7 +174,7 @@ nms_keyfile_reader_from_file (const char *full_filename,
 
 	if (!nms_keyfile_utils_check_file_permissions (NMS_KEYFILE_FILETYPE_KEYFILE,
 	                                               full_filename,
-	                                               NULL,
+	                                               out_stat,
 	                                               error))
 		return NULL;
 

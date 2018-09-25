@@ -15,30 +15,54 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- * Copyright (C) 2008 Novell, Inc.
- * Copyright (C) 2008 - 2012 Red Hat, Inc.
+ * Copyright (C) 2018 Red Hat, Inc.
  */
 
-#ifndef __NMS_KEYFILE_CONNECTION_H__
-#define __NMS_KEYFILE_CONNECTION_H__
+#ifndef __NMS_KEYFILE_STORAGE_H__
+#define __NMS_KEYFILE_STORAGE_H__
 
-#include "settings/nm-settings-connection.h"
+#include "c-list/src/c-list.h"
+#include "settings/nm-settings-storage.h"
+#include "nms-keyfile-utils.h"
 
-#define NMS_TYPE_KEYFILE_CONNECTION            (nms_keyfile_connection_get_type ())
-#define NMS_KEYFILE_CONNECTION(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), NMS_TYPE_KEYFILE_CONNECTION, NMSKeyfileConnection))
-#define NMS_KEYFILE_CONNECTION_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), NMS_TYPE_KEYFILE_CONNECTION, NMSKeyfileConnectionClass))
-#define NMS_IS_KEYFILE_CONNECTION(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), NMS_TYPE_KEYFILE_CONNECTION))
-#define NMS_IS_KEYFILE_CONNECTION_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), NMS_TYPE_KEYFILE_CONNECTION))
-#define NMS_KEYFILE_CONNECTION_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), NMS_TYPE_KEYFILE_CONNECTION, NMSKeyfileConnectionClass))
+#define NMS_TYPE_KEYFILE_STORAGE            (nms_keyfile_storage_get_type ())
+#define NMS_KEYFILE_STORAGE(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), NMS_TYPE_KEYFILE_STORAGE, NMSKeyfileStorage))
+#define NMS_KEYFILE_STORAGE_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), NMS_TYPE_KEYFILE_STORAGE, NMSKeyfileStorageClass))
+#define NMS_IS_KEYFILE_STORAGE(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), NMS_TYPE_KEYFILE_STORAGE))
+#define NMS_IS_KEYFILE_STORAGE_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), NMS_TYPE_KEYFILE_STORAGE))
+#define NMS_KEYFILE_STORAGE_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), NMS_TYPE_KEYFILE_STORAGE, NMSKeyfileStorageClass))
 
-typedef struct _NMSKeyfileConnection NMSKeyfileConnection;
-typedef struct _NMSKeyfileConnectionClass NMSKeyfileConnectionClass;
+typedef struct {
+	NMSettingsStorage parent;
 
-GType nms_keyfile_connection_get_type (void);
+	CList storage_lst;
 
-NMSKeyfileConnection *nms_keyfile_connection_new (NMConnection *source,
-                                                  const char *full_path,
-                                                  const char *profile_dir,
-                                                  GError **error);
+	char *full_filename;
 
-#endif /* __NMS_KEYFILE_CONNECTION_H__ */
+	char *uuid;
+
+	NMConnection *connection_exported;
+
+	/* Only relevant during reload-all. It contains a list of all the files
+	 * that are associated with this UUID. In general, any number of
+	 * files can have connection profiles for a particular UUID. During
+	 * _do_reload_all(), we need to load all of them and find the best one.
+	 *
+	 * After reload-all, this list is cleared again. */
+	struct _NMSKeyfileConnReloadHead *reload_data_head;
+
+	NMSKeyfileStorageType storage_type_exported;
+} NMSKeyfileStorage;
+
+typedef struct _NMSKeyfileStorageClass NMSKeyfileStorageClass;
+
+GType nms_keyfile_storage_get_type (void);
+
+struct _NMSKeyfilePlugin;
+
+NMSKeyfileStorage *nms_keyfile_storage_new (struct _NMSKeyfilePlugin *plugin,
+                                            const char *uuid);
+
+void _nms_keyfile_storage_clear (NMSKeyfileStorage *storage);
+
+#endif /* __NMS_KEYFILE_STORAGE_H__ */
