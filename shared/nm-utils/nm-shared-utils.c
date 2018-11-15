@@ -41,7 +41,7 @@ const NMIPAddr nm_ip_addr_zero = { 0 };
 gsize
 nm_utils_get_next_realloc_size (gboolean true_realloc, gsize requested)
 {
-	gsize n;
+	gsize n, x;
 
 	/* https://doc.qt.io/qt-5/containers.html#growth-strategies */
 
@@ -59,27 +59,38 @@ nm_utils_get_next_realloc_size (gboolean true_realloc, gsize requested)
 	}
 
 	if (   requested <= 0x2000 - 24
-	    || (   !true_realloc
-	        && requested <= ((G_MAXSIZE / 2) + 1) - 24)) {
-		/* mid sized allocations. Double the size, minus 24 bytes head-room.
+	    || G_UNLIKELY (!true_realloc)) {
+		/* mid sized allocations. Return next power of two, minus 24 bytes extra space
+		 * at the beginning.
+		 * That means, we double the size as we grow.
 		 *
-		 * With !true_realloc, we also do this scheme, because we don't actually
-		 * realloc(). Hence, we always want to grow the buffer exponentially.
+		 * With !true_realloc, it means that the caller does not intend to call
+		 * realloc() but instead clone the buffer. This is for example the case, when we
+		 * want to nm_explicit_bzero() the old buffer. In that case we really want to grow
+		 * the buffer exponentially every time and not increment in page sizes of 4K (below).
 		 *
 		 * We get thus sizes of 104, 232, 488, 1000, 2024, 4072, 8168... */
+
+		if (G_UNLIKELY (requested > G_MAXSIZE / 2))
+			return G_MAXSIZE;
+
+		x = requested + 24;
 		n = 128;
-		while (n - 24 < requested)
+		while (n < x)
 			n <<= 1;
+
+		nm_assert (n > 24 && n - 24 >= requested);
 		return n - 24;
 	}
 
-	if (requested > G_MAXSIZE - 0x0FFF)
+	if (G_UNLIKELY (requested > G_MAXSIZE - 0x0FFF))
 		return G_MAXSIZE;
 
-	/* For large allocations (with !do_bzero_mem) we allocate memory in chunks of
-	 * 4K (- 24 bytes head room), assuming that the memory gets mmapped and thus
+	/* For large allocations (with !true_realloc) we allocate memory in chunks of
+	 * 4K (- 24 bytes extra), assuming that the memory gets mmapped and thus
 	 * realloc() is efficient by just reordering pages. */
-	return ((requested + 0x0FFF) & ~((gsize) 0x0FFF)) - 24;
+	n = (((requested) + 0x0FFF) & ~((gsize) 0x0FFF)) - 24;
+	return MAX (n, requested);
 }
 
 /*****************************************************************************/
@@ -2211,4 +2222,69 @@ nm_utils_invoke_on_idle (NMUtilsInvokeOnIdleCallback callback,
 	} else
 		data->cancelled_id = 0;
 	data->idle_id = g_idle_add (_nm_utils_invoke_on_idle_cb_idle, data);
+}
+
+/*****************************************************************************/
+
+static inline void
+_str_buf_expand_exact (NMStrBuf *strbuf,
+                       gsize new_allocated_exact)
+{
+	_nm_str_buf_assert (strbuf);
+
+	/* this only supports strictly growing the buffer. */
+	nm_assert (new_allocated_exact > strbuf->_allocated);
+
+	strbuf->_str = nm_secret_mem_realloc (strbuf->_str, strbuf->_do_bzero_mem, strbuf->_allocated, new_allocated_exact);
+	strbuf->_allocated = new_allocated_exact;
+}
+
+void
+_nm_str_buf_expand_exact (NMStrBuf *strbuf,
+                          gsize new_allocated_exact)
+{
+	_str_buf_expand_exact (strbuf, new_allocated_exact);
+}
+
+void
+_nm_str_buf_expand_grow (NMStrBuf *strbuf,
+                         gsize new_allocated_lower_limit)
+{
+	_nm_str_buf_assert (strbuf);
+
+	/* this only supports strictly growing the buffer. */
+	nm_assert (new_allocated_lower_limit > strbuf->_allocated);
+
+	_str_buf_expand_exact (strbuf,
+	                       nm_utils_get_next_realloc_size (!strbuf->_do_bzero_mem,
+	                                                       new_allocated_lower_limit));
+}
+
+void
+nm_str_buf_append_printf (NMStrBuf *strbuf,
+                          const char *format,
+                          ...)
+{
+	va_list args;
+	gsize len;
+	int l;
+
+	_nm_str_buf_assert (strbuf);
+
+	va_start (args, format);
+	len = g_printf_string_upper_bound (format, args);
+	va_end (args);
+
+	nm_str_buf_maybe_expand (strbuf, len);
+
+	va_start (args, format);
+	l = g_vsnprintf (&strbuf->_str[strbuf->_len], len, format, args);
+	va_end (args);
+
+	nm_assert (l >= 0);
+	nm_assert (strlen (&strbuf->_str[strbuf->_len]) == (gsize) l);
+	nm_assert ((gsize) l < len);
+
+	if (l > 0)
+		strbuf->_len += (gsize) l;
 }

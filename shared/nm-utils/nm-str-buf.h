@@ -35,6 +35,8 @@ typedef struct {
 	bool _do_bzero_mem;
 } NMStrBuf;
 
+/*****************************************************************************/
+
 static inline void
 _nm_str_buf_assert (NMStrBuf *strbuf)
 {
@@ -49,26 +51,22 @@ nm_str_buf_init (NMStrBuf *strbuf,
                  gsize len,
                  bool do_bzero_mem)
 {
+	nm_assert (strbuf);
+	nm_assert (len > 0);
+
 	strbuf->_do_bzero_mem = do_bzero_mem;
-	strbuf->_allocated = len;
-	strbuf->_str = g_malloc (len);
-	strbuf->_len = 0;
+	strbuf->_allocated    = len;
+	strbuf->_str          = g_malloc (len);
+	strbuf->_len          = 0;
 
 	_nm_str_buf_assert (strbuf);
 }
 
-static inline void
-nm_str_buf_expand (NMStrBuf *strbuf,
-                   gsize new_allocated)
-{
-	_nm_str_buf_assert (strbuf);
+void _nm_str_buf_expand_exact (NMStrBuf *strbuf,
+                               gsize new_allocated_exact);
 
-	/* currently, this only supports strictly growing the buffer. */
-	nm_assert (new_allocated > strbuf->_allocated);
-
-	strbuf->_str = nm_secret_mem_realloc (strbuf->_str, strbuf->_do_bzero_mem, strbuf->_allocated, new_allocated);
-	strbuf->_allocated = new_allocated;
-}
+void _nm_str_buf_expand_grow (NMStrBuf *strbuf,
+                              gsize new_allocated_lower_limit);
 
 static inline void
 nm_str_buf_maybe_expand (NMStrBuf *strbuf,
@@ -78,19 +76,14 @@ nm_str_buf_maybe_expand (NMStrBuf *strbuf,
 	nm_assert (reserve > 0);
 
 	/* @reserve is the extra space that we require. */
-	if (G_UNLIKELY (reserve > strbuf->_allocated - strbuf->_len)) {
-		nm_str_buf_expand (strbuf,
-		                   nm_utils_get_next_realloc_size (!strbuf->_do_bzero_mem,
-		                                                   strbuf->_len + reserve));
-	}
+	if (G_UNLIKELY (reserve > strbuf->_allocated - strbuf->_len))
+		_nm_str_buf_expand_grow (strbuf, strbuf->_len + reserve);
 }
 
 static inline void
 nm_str_buf_append_c (NMStrBuf *strbuf,
                      char ch)
 {
-	_nm_str_buf_assert (strbuf);
-
 	nm_str_buf_maybe_expand (strbuf, 2);
 	strbuf->_str[strbuf->_len++] = ch;
 }
@@ -100,8 +93,6 @@ nm_str_buf_append_c2 (NMStrBuf *strbuf,
                       char ch0,
                       char ch1)
 {
-	_nm_str_buf_assert (strbuf);
-
 	nm_str_buf_maybe_expand (strbuf, 3);
 	strbuf->_str[strbuf->_len++] = ch0;
 	strbuf->_str[strbuf->_len++] = ch1;
@@ -114,8 +105,6 @@ nm_str_buf_append_c4 (NMStrBuf *strbuf,
                       char ch2,
                       char ch3)
 {
-	_nm_str_buf_assert (strbuf);
-
 	nm_str_buf_maybe_expand (strbuf, 5);
 	strbuf->_str[strbuf->_len++] = ch0;
 	strbuf->_str[strbuf->_len++] = ch1;
@@ -141,41 +130,16 @@ static inline void
 nm_str_buf_append (NMStrBuf *strbuf,
                    const char *str)
 {
-	_nm_str_buf_assert (strbuf);
 	nm_assert (str);
 
 	nm_str_buf_append_len (strbuf, str, strlen (str));
 }
 
-_nm_printf (2, 3)
-static inline void
-nm_str_buf_append_printf (NMStrBuf *strbuf,
-                          const char *format,
-                          ...)
-{
-	va_list args;
-	gsize len;
-	int l;
+void nm_str_buf_append_printf (NMStrBuf *strbuf,
+                               const char *format,
+                               ...) _nm_printf (2, 3);
 
-	_nm_str_buf_assert (strbuf);
-
-	va_start (args, format);
-	len = g_printf_string_upper_bound (format, args);
-	va_end (args);
-
-	nm_str_buf_maybe_expand (strbuf, len);
-
-	va_start (args, format);
-	l = g_vsnprintf (&strbuf->_str[strbuf->_len], len, format, args);
-	va_end (args);
-
-	nm_assert (l >= 0);
-	nm_assert (strlen (&strbuf->_str[strbuf->_len]) == (gsize) l);
-	nm_assert ((gsize) l < len);
-
-	if (l > 0)
-		strbuf->_len += (gsize) l;
-}
+/*****************************************************************************/
 
 /**
  * nm_str_buf_get_str:
@@ -187,8 +151,9 @@ nm_str_buf_append_printf (NMStrBuf *strbuf,
  * is not NUL terminated (this makes it different from GString).
  * Usually, one would build the string and retrieve it at the
  * end with nm_str_buf_finalize(). This returns the NUL terminated
- * buffer that was  so far. Afterwards, you can still
- * append more data to the buffer.
+ * buffer that was appended so far. Contrary to nm_str_buf_finalize(), you
+ * can still append more data to the buffer and this does not transfer ownership
+ * of the string.
  *
  * Returns: (transfer none): the internal string. The string
  *   is of length "strbuf->len", which may be larger if the
@@ -198,8 +163,6 @@ nm_str_buf_append_printf (NMStrBuf *strbuf,
 static inline const char *
 nm_str_buf_get_str (NMStrBuf *strbuf)
 {
-	_nm_str_buf_assert (strbuf);
-
 	nm_str_buf_maybe_expand (strbuf, 1);
 	strbuf->_str[strbuf->_len] = '\0';
 	return strbuf->_str;
@@ -219,8 +182,6 @@ static inline char *
 nm_str_buf_finalize (NMStrBuf *strbuf,
                      gsize *out_len)
 {
-	_nm_str_buf_assert (strbuf);
-
 	nm_str_buf_maybe_expand (strbuf, 1);
 	strbuf->_str[strbuf->_len] = '\0';
 
