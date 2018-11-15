@@ -29,7 +29,7 @@ void
 nm_explicit_bzero (void *s, gsize n)
 {
 	/* gracefully handle n == 0. This is important, callers rely on it. */
-	if (n > 0) {
+	if (G_LIKELY (n > 0)) {
 		nm_assert (s);
 #if defined (HAVE_DECL_EXPLICIT_BZERO) && HAVE_DECL_EXPLICIT_BZERO
 		explicit_bzero (s, n);

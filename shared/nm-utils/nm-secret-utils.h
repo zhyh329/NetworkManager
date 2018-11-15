@@ -148,21 +148,33 @@ GBytes *nm_secret_buf_to_gbytes_take (NMSecretBuf *secret, gssize actual_len);
 
 /*****************************************************************************/
 
-static inline char *
-nm_secret_mem_realloc (char *m_old, gboolean do_bzero_mem, gsize cur_len, gsize new_len)
+/**
+ * nm_secret_mem_realloc:
+ * @m_old: the current buffer of length @cur_len.
+ * @do_bzero_mem: if %TRUE, bzero the old buffer
+ * @cur_len: the current buffer length of @m_old. It is necessary for bzero.
+ * @new_len: the desired new length
+ *
+ * If @do_bzero_mem is false, this is like g_realloc().
+ * Otherwise, this will allocate a new buffer of the desired size, copy over the
+ * old data, and bzero the old buffer before freeing it. As such, it also behaves
+ * similar to g_realloc(), with the overhead of nm_explicit_bzero() and using
+ * malloc/free intead of realloc().
+ *
+ * Returns: the new allocated buffer. Think of it behaving like g_realloc().
+ */
+static inline gpointer
+nm_secret_mem_realloc (gpointer m_old, gboolean do_bzero_mem, gsize cur_len, gsize new_len)
 {
-	char *m_new;
+	gpointer m_new;
 
-	/* re-allocating to zero bytes is an odd case. We don't need it
-	 * and don't want to care about handling the edge cases. */
-	nm_assert (new_len > 0);
-
-	/* regardless of success/failure, @m_old will always be freed/consumed. */
+	nm_assert (m_old || cur_len == 0);
 
 	if (   do_bzero_mem
-	    && cur_len > 0) {
+	    && G_LIKELY (cur_len > 0)) {
 		m_new = g_malloc (new_len);
-		memcpy (m_new, m_old, NM_MIN (cur_len, new_len));
+		if (G_LIKELY (new_len > 0))
+			memcpy (m_new, m_old, NM_MIN (cur_len, new_len));
 		nm_explicit_bzero (m_old, cur_len);
 		g_free (m_old);
 	} else
@@ -171,21 +183,38 @@ nm_secret_mem_realloc (char *m_old, gboolean do_bzero_mem, gsize cur_len, gsize 
 	return m_new;
 }
 
-static inline char *
-nm_secret_mem_try_realloc (char *m_old, gboolean do_bzero_mem, gsize cur_len, gsize new_len)
+/**
+ * nm_secret_mem_try_realloc:
+ * @m_old: the current buffer of length @cur_len.
+ * @do_bzero_mem: if %TRUE, bzero the old buffer
+ * @cur_len: the current buffer length of @m_old. It is necessary for bzero.
+ * @new_len: the desired new length
+ *
+ * If @do_bzero_mem is false, this is like g_try_realloc().
+ * Otherwise, this will try to allocate a new buffer of the desired size, copy over the
+ * old data, and bzero the old buffer before freeing it. As such, it also behaves
+ * similar to g_try_realloc(), with the overhead of nm_explicit_bzero() and using
+ * malloc/free intead of realloc().
+ *
+ * Returns: the new allocated buffer or NULL. Think of it behaving like g_try_realloc().
+ */
+static inline gpointer
+nm_secret_mem_try_realloc (gpointer m_old, gboolean do_bzero_mem, gsize cur_len, gsize new_len)
 {
-	char *m_new;
+	gpointer m_new;
 
-	/* re-allocating to zero bytes is an odd case. We don't need it
-	 * and don't want to care about handling the edge cases. */
-	nm_assert (new_len > 0);
+	nm_assert (m_old || cur_len == 0);
 
 	if (   do_bzero_mem
-	    && cur_len > 0) {
-		m_new = g_try_malloc (new_len);
-		if (!m_new)
-			return NULL;
-		memcpy (m_new, m_old, NM_MIN (cur_len, new_len));
+	    && G_LIKELY (cur_len > 0)) {
+		if (G_UNLIKELY (new_len == 0))
+			m_new = NULL;
+		else {
+			m_new = g_try_malloc (new_len);
+			if (!m_new)
+				return NULL;
+			memcpy (m_new, m_old, NM_MIN (cur_len, new_len));
+		}
 		nm_explicit_bzero (m_old, cur_len);
 		g_free (m_old);
 		return m_new;
@@ -194,18 +223,45 @@ nm_secret_mem_try_realloc (char *m_old, gboolean do_bzero_mem, gsize cur_len, gs
 	return g_try_realloc (m_old, new_len);
 }
 
-static inline char *
-nm_secret_mem_try_realloc_take (char *m_old, gboolean do_bzero_mem, gsize cur_len, gsize new_len)
+/**
+ * nm_secret_mem_try_realloc_take:
+ * @m_old: the current buffer of length @cur_len.
+ * @do_bzero_mem: if %TRUE, bzero the old buffer
+ * @cur_len: the current buffer length of @m_old. It is necessary for bzero.
+ * @new_len: the desired new length
+ *
+ * This works like nm_secret_mem_try_realloc(), which is not unlike g_try_realloc().
+ * The difference is, if we fail to allocate a new buffer, then @m_old will be
+ * freed (and possibly cleared). This differs from plain realloc(), where the
+ * old buffer is unchanged if the operation fails.
+ *
+ * Returns: the new allocated buffer or NULL. Think of it behaving like g_try_realloc()
+ *   but it will always free @m_old.
+ */
+static inline gpointer
+nm_secret_mem_try_realloc_take (gpointer m_old, gboolean do_bzero_mem, gsize cur_len, gsize new_len)
 {
-	char *m_new;
+	gpointer m_new;
 
-	m_new = nm_secret_mem_try_realloc (m_old, do_bzero_mem, cur_len, new_len);
-	if (G_UNLIKELY (!m_new)) {
-		/* realloc failed and m_old is unchanged. Here, we still free/consume
-		 * the old pointer, which makes it different from plain realloc. */
+	nm_assert (m_old || cur_len == 0);
+
+	if (   do_bzero_mem
+	    && G_LIKELY (cur_len > 0)) {
+		if (G_UNLIKELY (new_len == 0))
+			m_new = NULL;
+		else {
+			m_new = g_try_malloc (new_len);
+			if (G_LIKELY (m_new))
+				memcpy (m_new, m_old, NM_MIN (cur_len, new_len));
+		}
 		nm_explicit_bzero (m_old, cur_len);
 		g_free (m_old);
+		return m_new;
 	}
+
+	m_new = g_try_realloc (m_old, new_len);
+	if (G_UNLIKELY (!m_new && new_len > 0))
+		g_free (m_old);
 	return m_new;
 }
 
