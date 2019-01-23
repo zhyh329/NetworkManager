@@ -42,6 +42,7 @@ typedef struct {
 	NMSupplicantFeature pmf_support;
 	NMSupplicantFeature fils_support;
 	NMSupplicantFeature p2p_support;
+	NMSupplicantFeature mesh_support;
 	NMSupplicantFeature wfd_support;
 	guint             die_count_reset_id;
 	guint             die_count;
@@ -168,6 +169,7 @@ nm_supplicant_manager_create_interface (NMSupplicantManager *self,
 	                                     priv->pmf_support,
 	                                     priv->fils_support,
 	                                     priv->p2p_support,
+	                                     priv->mesh_support,
 	                                     priv->wfd_support);
 
 	priv->ifaces = g_slist_prepend (priv->ifaces, iface);
@@ -225,6 +227,7 @@ nm_supplicant_manager_create_interface_from_path (NMSupplicantManager *self,
 	                                     priv->pmf_support,
 	                                     priv->fils_support,
 	                                     priv->p2p_support,
+	                                     priv->mesh_support,
 	                                     priv->wfd_support);
 
 	priv->ifaces = g_slist_prepend (priv->ifaces, iface);
@@ -261,8 +264,9 @@ update_capabilities (NMSupplicantManager *self)
 	priv->ap_support = NM_SUPPLICANT_FEATURE_UNKNOWN;
 	priv->pmf_support = NM_SUPPLICANT_FEATURE_UNKNOWN;
 	priv->fils_support = NM_SUPPLICANT_FEATURE_UNKNOWN;
-	/* P2P support is newer than the capabilities property */
+	/* properties below are newer than the capabilities property */
 	priv->p2p_support = NM_SUPPLICANT_FEATURE_NO;
+	priv->mesh_support = NM_SUPPLICANT_FEATURE_NO;
 
 	value = g_dbus_proxy_get_cached_property (priv->proxy, "Capabilities");
 	if (value) {
@@ -272,6 +276,7 @@ update_capabilities (NMSupplicantManager *self)
 			priv->pmf_support = NM_SUPPLICANT_FEATURE_NO;
 			priv->fils_support = NM_SUPPLICANT_FEATURE_NO;
 			priv->p2p_support = NM_SUPPLICANT_FEATURE_NO;
+			priv->mesh_support = NM_SUPPLICANT_FEATURE_NO;
 			if (array) {
 				if (g_strv_contains (array, "ap"))
 					priv->ap_support = NM_SUPPLICANT_FEATURE_YES;
@@ -281,6 +286,8 @@ update_capabilities (NMSupplicantManager *self)
 					priv->fils_support = NM_SUPPLICANT_FEATURE_YES;
 				if (g_strv_contains (array, "p2p"))
 					priv->p2p_support = NM_SUPPLICANT_FEATURE_YES;
+				if (g_strv_contains (array, "mesh"))
+					priv->mesh_support = NM_SUPPLICANT_FEATURE_YES;
 				g_free (array);
 			}
 		}
@@ -293,6 +300,7 @@ update_capabilities (NMSupplicantManager *self)
 		nm_supplicant_interface_set_pmf_support (ifaces->data, priv->pmf_support);
 		nm_supplicant_interface_set_fils_support (ifaces->data, priv->fils_support);
 		nm_supplicant_interface_set_p2p_support (ifaces->data, priv->p2p_support);
+		nm_supplicant_interface_set_mesh_support (ifaces->data, priv->mesh_support);
 	}
 
 	_LOGD ("AP mode is %ssupported",
@@ -307,6 +315,9 @@ update_capabilities (NMSupplicantManager *self)
 	_LOGD ("P2P is %ssupported",
 	       (priv->p2p_support == NM_SUPPLICANT_FEATURE_YES) ? "" :
 	           (priv->p2p_support == NM_SUPPLICANT_FEATURE_NO) ? "not " : "possibly ");
+	_LOGD ("Mesh is %ssupported",
+	       (priv->mesh_support == NM_SUPPLICANT_FEATURE_YES) ? "" :
+	           (priv->mesh_support == NM_SUPPLICANT_FEATURE_NO) ? "not " : "possibly ");
 
 	/* EAP-FAST */
 	priv->fast_support = NM_SUPPLICANT_FEATURE_NO;
