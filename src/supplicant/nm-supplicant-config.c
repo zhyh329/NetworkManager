@@ -455,7 +455,7 @@ nm_supplicant_config_add_setting_wireless (NMSupplicantConfig * self,
                                            GError **error)
 {
 	NMSupplicantConfigPrivate *priv;
-	gboolean is_adhoc, is_ap;
+	gboolean is_adhoc, is_ap, is_mesh;
 	const char *mode, *band;
 	guint32 channel;
 	GBytes *ssid;
@@ -470,6 +470,7 @@ nm_supplicant_config_add_setting_wireless (NMSupplicantConfig * self,
 	mode = nm_setting_wireless_get_mode (setting);
 	is_adhoc = (mode && !strcmp (mode, "adhoc")) ? TRUE : FALSE;
 	is_ap = (mode && !strcmp (mode, "ap")) ? TRUE : FALSE;
+	is_mesh = (mode && !strcmp (mode, "mesh")) ? TRUE : FALSE;
 	if (is_adhoc || is_ap)
 		priv->ap_scan = 2;
 	else
@@ -499,7 +500,12 @@ nm_supplicant_config_add_setting_wireless (NMSupplicantConfig * self,
 			return FALSE;
 	}
 
-	if ((is_adhoc || is_ap) && fixed_freq) {
+	if (is_mesh) {
+		if (!nm_supplicant_config_add_option (self, "mode", "5", -1, NULL, error))
+			return FALSE;
+	}
+
+	if ((is_adhoc || is_ap || is_mesh) && fixed_freq) {
 		gs_free char *str_freq = NULL;
 
 		str_freq = g_strdup_printf ("%u", fixed_freq);
@@ -507,10 +513,10 @@ nm_supplicant_config_add_setting_wireless (NMSupplicantConfig * self,
 			return FALSE;
 	}
 
-	/* Except for Ad-Hoc and Hotspot, request that the driver probe for the
+	/* Except for Ad-Hoc, Hotspot and Mesh, request that the driver probe for the
 	 * specific SSID we want to associate with.
 	 */
-	if (!(is_adhoc || is_ap)) {
+	if (!(is_adhoc || is_ap || is_mesh)) {
 		if (!nm_supplicant_config_add_option (self, "scan_ssid", "1", -1, NULL, error))
 			return FALSE;
 	}
@@ -850,8 +856,10 @@ nm_supplicant_config_add_setting_wireless_security (NMSupplicantConfig *self,
 		}
 	}
 
-	/* Don't try to enable PMF on non-WPA networks */
-	if (!NM_IN_STRSET (key_mgmt, "wpa-eap", "wpa-psk"))
+	/* Force PMF with SAE, disable it on non-WPA networks */
+	if (!strcmp (key_mgmt, "sae"))
+		pmf = NM_SETTING_WIRELESS_SECURITY_PMF_REQUIRED;
+	else if (!NM_IN_STRSET (key_mgmt, "wpa-eap", "wpa-psk"))
 		pmf = NM_SETTING_WIRELESS_SECURITY_PMF_DISABLE;
 
 	/* Check if we actually support PMF */
