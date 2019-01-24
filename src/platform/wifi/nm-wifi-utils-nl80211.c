@@ -201,6 +201,9 @@ nl80211_iface_info_handler (struct nl_msg *msg, void *arg)
 	case NL80211_IFTYPE_STATION:
 		info->mode = NM_802_11_MODE_INFRA;
 		break;
+	case NL80211_IFTYPE_MESH_POINT:
+		info->mode = NM_802_11_MODE_MESH;
+		break;
 	}
 
 	return NL_SKIP;
@@ -242,6 +245,9 @@ wifi_nl80211_set_mode (NMWifiUtils *data, const NM80211Mode mode)
 		break;
 	case NM_802_11_MODE_AP:
 		NLA_PUT_U32 (msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_AP);
+		break;
+	case NM_802_11_MODE_MESH:
+		NLA_PUT_U32 (msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_MESH_POINT);
 		break;
 	default:
 		g_assert_not_reached ();
@@ -886,6 +892,9 @@ static int nl80211_wiphy_info_handler (struct nl_msg *msg, void *arg)
 				info->caps |= NM_WIFI_DEVICE_CAP_AP;
 			else if (nla_type (nl_mode) == NL80211_IFTYPE_ADHOC)
 				info->caps |= NM_WIFI_DEVICE_CAP_ADHOC;
+
+			if (nla_type (nl_mode) == NL80211_IFTYPE_MESH_POINT)
+				info->caps |= NM_WIFI_DEVICE_CAP_MESH;
 		}
 	}
 
