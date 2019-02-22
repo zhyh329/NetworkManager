@@ -22,6 +22,12 @@ _is_true() {
         0|n|no|NO|No|off)
             return 1
             ;;
+        "")
+            if [ "$2" == "" ]; then
+                die "not a boolean argument \"$1\""
+            fi
+            return "$2"
+            ;;
         *)
             die "not a boolean argument \"$1\""
             ;;
@@ -138,6 +144,10 @@ run_autotools() {
             _autotools_test_print_logs "second-test"
             die "test failed"
         fi
+
+        if _is_true "$WITH_VALGRIND" 1; then
+            NMTST_USE_VALGRIND=1 make check -j 3
+        fi
     popd
 }
 
@@ -187,6 +197,10 @@ run_meson() {
 
     ninja -C build
     ninja -C build test
+
+    if _is_true "$WITH_VALGRIND" 1; then
+        NMTST_USE_VALGRIND=1 ninja -C build test
+    fi
 }
 
 ###############################################################################

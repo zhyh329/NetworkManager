@@ -12,17 +12,19 @@ stages:
   before_script:
     - date '+%Y%m%d-%H%M%S'; NM_INSTALL="dnf install -y" ./contrib/fedora/REQUIRED_PACKAGES
     - date '+%Y%m%d-%H%M%S'; dnf install -y glibc-langpack-pl ccache clang
+    - date '+%Y%m%d-%H%M%S'; dnf install -y python3-dnf-plugins-core
+    - date '+%Y%m%d-%H%M%S'; dnf debuginfo-install -y glib2
     - date '+%Y%m%d-%H%M%S'; locale -a
     - date '+%Y%m%d-%H%M%S'; contrib/scripts/nm-ci-patch-gtkdoc.sh || true
 
 .fedora_script: &fedora_script
   stage: test
   script:
-    - date '+%Y%m%d-%H%M%S'; git clean -fdx ; CI=gitlab BUILD_TYPE=autotools CC=gcc   WITH_DOCS=1 contrib/scripts/nm-ci-run.sh
+    - date '+%Y%m%d-%H%M%S'; git clean -fdx ; CI=gitlab BUILD_TYPE=autotools CC=gcc   WITH_DOCS=1 WITH_VALGRIND=1 contrib/scripts/nm-ci-run.sh
     - date '+%Y%m%d-%H%M%S'; rm -rf /tmp/nm-docs-html; mv build/INST/share/gtk-doc/html /tmp/nm-docs-html
-    - date '+%Y%m%d-%H%M%S'; git clean -fdx ; CI=gitlab BUILD_TYPE=meson     CC=gcc   WITH_DOCS=1 contrib/scripts/nm-ci-run.sh
-    - date '+%Y%m%d-%H%M%S'; git clean -fdx ; CI=gitlab BUILD_TYPE=autotools CC=clang WITH_DOCS=0 contrib/scripts/nm-ci-run.sh
-    - date '+%Y%m%d-%H%M%S'; git clean -fdx ; CI=gitlab BUILD_TYPE=meson     CC=clang WITH_DOCS=0 contrib/scripts/nm-ci-run.sh
+    - date '+%Y%m%d-%H%M%S'; git clean -fdx ; CI=gitlab BUILD_TYPE=meson     CC=gcc   WITH_DOCS=1 WITH_VALGRIND=0 contrib/scripts/nm-ci-run.sh
+    - date '+%Y%m%d-%H%M%S'; git clean -fdx ; CI=gitlab BUILD_TYPE=autotools CC=clang WITH_DOCS=0 WITH_VALGRIND=0 contrib/scripts/nm-ci-run.sh
+    - date '+%Y%m%d-%H%M%S'; git clean -fdx ; CI=gitlab BUILD_TYPE=meson     CC=clang WITH_DOCS=0 WITH_VALGRIND=1 contrib/scripts/nm-ci-run.sh
     - date '+%Y%m%d-%H%M%S'; ./contrib/fedora/rpm/build_clean.sh -g -w crypto_gnutls -w debug -w iwd -w test
     - date '+%Y%m%d-%H%M%S'; ./contrib/fedora/rpm/build_clean.sh -g -w crypto_gnutls -w debug -w iwd -w test -w meson
     - date '+%Y%m%d-%H%M%S'; mv /tmp/nm-docs-html ./docs-html
