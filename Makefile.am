@@ -183,8 +183,6 @@ endif
 
 dist: $(dist_configure_check) $(dist_dependencies)
 
-DISTCLEANFILES += intltool-extract intltool-merge intltool-update
-
 ###############################################################################
 
 if WITH_LEGACY_LIBRARIES
@@ -198,9 +196,12 @@ polkit_policydir = $(datadir)/polkit-1/actions
 dist_polkit_policy_in_in_files = \
 	data/org.freedesktop.NetworkManager.policy.in.in
 
-polkit_policy_DATA = $(dist_polkit_policy_in_in_files:.policy.in.in=.policy)
+dist_polkit_policy_in_files = $(dist_polkit_policy_in_in_files:.policy.in.in=.policy.in)
 
-@INTLTOOL_POLICY_RULE@
+polkit_policy_DATA = $(dist_polkit_policy_in_files:.policy.in=.policy)
+
+$(polkit_policy_DATA): $(dist_polkit_policy_in_files)
+	$(AM_V_GEN)$(MSGFMT) --xml --template $< -d $(top_srcdir)/po -o $@
 
 DISTCLEANFILES += $(polkit_policy_DATA)
 
@@ -5236,9 +5237,6 @@ TESTS += $(check_programs)
 EXTRA_DIST += \
 	CONTRIBUTING \
 	NetworkManager.pc.in \
-	intltool-extract.in \
-	intltool-merge.in \
-	intltool-update.in \
 	linker-script-binary.ver \
 	linker-script-devices.ver \
 	linker-script-settings.ver \

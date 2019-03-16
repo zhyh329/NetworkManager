@@ -49,7 +49,6 @@ test-*.trs
 /config.*
 /config-extra.h
 /configure
-/intltool-*
 
 /confdefs.h
 /conftest.[ch]
@@ -201,7 +200,6 @@ test-*.trs
 /m4/intl.m4
 /m4/intldir.m4
 /m4/intlmacosx.m4
-/m4/intltool.m4
 /m4/intmax.m4
 /m4/inttypes-pri.m4
 /m4/inttypes_h.m4
@@ -232,7 +230,6 @@ test-*.trs
 /man/common.ent
 
 /po/*.gmo
-/po/.intltool-merge-cache
 /po/NetworkManager.pot
 /po/Makevars.template
 /po/Rules-quot
