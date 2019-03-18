@@ -2,7 +2,7 @@ sources = files(
   'nm-modem-broadband.c',
   'nm-modem.c',
   'nm-modem-manager.c',
-  'nm-service-provider.c',
+  'nm-service-providers.c',
 )
 
 deps = [
