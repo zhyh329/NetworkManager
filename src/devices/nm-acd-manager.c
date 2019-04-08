@@ -392,7 +392,9 @@ nm_acd_manager_announce_addresses (NMAcdManager *self)
 	int r;
 	gboolean success = TRUE;
 
+	g_print (">>> calling acd_init()\n");
 	r = acd_init (self);
+	g_print (">>> calling acd_init() resulted in %d\n", r);
 	if (r) {
 		_LOGW ("couldn't init ACD for announcing addresses on interface '%s': %s",
 		       nm_platform_link_get_name (NM_PLATFORM_GET, self->ifindex),
