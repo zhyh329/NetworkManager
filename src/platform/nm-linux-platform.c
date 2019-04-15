@@ -4534,7 +4534,6 @@ sysctl_set (NMPlatform *platform,
             const char *value)
 {
 	nm_auto_pop_netns NMPNetns *netns = NULL;
-	gs_free_error GError *error = NULL;
 
 	g_return_val_if_fail (path, FALSE);
 	g_return_val_if_fail (value, FALSE);
