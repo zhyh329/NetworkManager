@@ -4768,6 +4768,58 @@ test_write_wired_static_ip6_only (void)
 	nmtst_assert_connection_equals (connection, TRUE, reread, FALSE);
 }
 
+static void
+test_write_ip6_disabled (void)
+{
+	nmtst_auto_unlinkfile char *testfile = NULL;
+	gs_unref_object NMConnection *connection = NULL;
+	gs_unref_object NMConnection *reread = NULL;
+	NMSettingConnection *s_con;
+	NMSettingWired *s_wired;
+	NMSettingIPConfig *s_ip4;
+	NMSettingIPConfig *s_ip6;
+
+	connection = nm_simple_connection_new ();
+
+	/* Connection setting */
+	s_con = (NMSettingConnection *) nm_setting_connection_new ();
+	nm_connection_add_setting (connection, NM_SETTING (s_con));
+
+	g_object_set (s_con,
+	              NM_SETTING_CONNECTION_ID, "Test Write Wired Disabled IP6",
+	              NM_SETTING_CONNECTION_UUID, nm_utils_uuid_generate_a (),
+	              NM_SETTING_CONNECTION_AUTOCONNECT, TRUE,
+	              NM_SETTING_CONNECTION_TYPE, NM_SETTING_WIRED_SETTING_NAME,
+	              NULL);
+
+	s_wired = (NMSettingWired *) nm_setting_wired_new ();
+	nm_connection_add_setting (connection, NM_SETTING (s_wired));
+
+	s_ip4 = (NMSettingIPConfig *) nm_setting_ip4_config_new ();
+	nm_connection_add_setting (connection, NM_SETTING (s_ip4));
+	g_object_set (s_ip4,
+	              NM_SETTING_IP_CONFIG_METHOD, NM_SETTING_IP4_CONFIG_METHOD_AUTO,
+	              NULL);
+
+	s_ip6 = (NMSettingIPConfig *) nm_setting_ip6_config_new ();
+	nm_connection_add_setting (connection, NM_SETTING (s_ip6));
+	g_object_set (s_ip6,
+	              NM_SETTING_IP_CONFIG_METHOD, NM_SETTING_IP6_CONFIG_METHOD_DISABLED,
+	              NULL);
+
+	nmtst_assert_connection_verifies (connection);
+
+	_writer_new_connec_exp (connection,
+	                        TEST_SCRATCH_DIR_TMP,
+	                        TEST_IFCFG_DIR"/ifcfg-test-ip6-disabled.cexpected",
+	                        &testfile);
+
+	reread = _connection_from_file (testfile, NULL, TYPE_ETHERNET, NULL);
+	nm_connection_dump (connection);
+	nm_connection_dump (reread);
+	nmtst_assert_connection_equals (connection, TRUE, reread, FALSE);
+}
+
 /* Test writing an IPv6 config with varying gateway address.
  * For missing gateway (::), we expect no IPV6_DEFAULTGW to be written
  * to ifcfg-rh.
@@ -10177,6 +10229,7 @@ int main (int argc, char **argv)
 	g_test_add_data_func (TPATH "static-ip6-only-gw/::", "::", test_write_wired_static_ip6_only_gw);
 	g_test_add_data_func (TPATH "static-ip6-only-gw/2001:db8:8:4::2", "2001:db8:8:4::2", test_write_wired_static_ip6_only_gw);
 	g_test_add_data_func (TPATH "static-ip6-only-gw/::ffff:255.255.255.255", "::ffff:255.255.255.255", test_write_wired_static_ip6_only_gw);
+	g_test_add_func (TPATH "ip6/disabled", test_write_ip6_disabled);
 	g_test_add_func (TPATH "read-dns-options", test_read_dns_options);
 	g_test_add_func (TPATH "clear-master", test_clear_master);
 

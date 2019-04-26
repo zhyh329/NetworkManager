@@ -9795,6 +9795,11 @@ act_stage3_ip_config_start (NMDevice *self,
 		NMSettingIP6ConfigPrivacy ip6_privacy = NM_SETTING_IP6_CONFIG_PRIVACY_UNKNOWN;
 		const char *ip6_privacy_str = "0";
 
+		if (nm_streq (method, NM_SETTING_IP6_CONFIG_METHOD_DISABLED)) {
+			set_disable_ipv6 (self, "1");
+			return NM_ACT_STAGE_RETURN_IP_DONE;
+		}
+
 		if (nm_streq (method, NM_SETTING_IP6_CONFIG_METHOD_IGNORE)) {
 			if (   !priv->master
 			    && !nm_device_sys_iface_state_is_external (self)) {
