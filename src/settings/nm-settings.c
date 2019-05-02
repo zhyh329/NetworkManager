@@ -1136,7 +1136,7 @@ pk_add_cb (NMAuthChain *chain,
 	NMSettings *self = NM_SETTINGS (user_data);
 	NMSettingsPrivate *priv = NM_SETTINGS_GET_PRIVATE (self);
 	NMAuthCallResult result;
-	GError *error = NULL;
+	gs_free_error GError *error = NULL;
 	NMConnection *connection = NULL;
 	gs_unref_object NMSettingsConnection *added = NULL;
 	NMSettingsAddCallback callback;
@@ -1145,12 +1145,13 @@ pk_add_cb (NMAuthChain *chain,
 	const char *perm;
 	gboolean save_to_disk;
 
-	g_assert (context);
+	nm_assert (G_IS_DBUS_METHOD_INVOCATION (context));
 
 	priv->auths = g_slist_remove (priv->auths, chain);
 
 	perm = nm_auth_chain_get_data (chain, "perm");
-	g_assert (perm);
+	nm_assert (perm);
+
 	result = nm_auth_chain_get_result (chain, perm);
 
 	if (chain_error) {
@@ -1184,11 +1185,10 @@ pk_add_cb (NMAuthChain *chain,
 	callback (self, added, error, context, subject, callback_data);
 
 	/* Send agent-owned secrets to the agents */
-	if (!error && added && nm_settings_has_connection (self, added))
+	if (   !error
+	    && added
+	    && nm_settings_has_connection (self, added))
 		send_agent_owned_secrets (self, added, subject);
-
-	g_clear_error (&error);
-	nm_auth_chain_destroy (chain);
 }
 
 /* FIXME: remove if/when kernel supports adhoc wpa */
@@ -1503,7 +1503,7 @@ pk_hostname_cb (NMAuthChain *chain,
 	GError *error = NULL;
 	const char *hostname;
 
-	g_assert (context);
+	nm_assert (G_IS_DBUS_METHOD_INVOCATION (context));
 
 	priv->auths = g_slist_remove (priv->auths, chain);
 
@@ -1533,8 +1533,6 @@ pk_hostname_cb (NMAuthChain *chain,
 		g_dbus_method_invocation_take_error (context, error);
 	else
 		g_dbus_method_invocation_return_value (context, NULL);
-
-	nm_auth_chain_destroy (chain);
 }
 
 static void
